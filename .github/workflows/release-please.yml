@@ -26,12 +26,25 @@ jobs:
           RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
-          elements=(Hydrogen Helium Carbon Neon Silicon Iron Copper Silver Gold)
-          tools=(Anvil Hammer Tongs Bellows Chisel Crucible Forge Quenchstone Sledge)
+          elements=(
+            Hydrogen Helium Lithium Beryllium Boron Carbon Nitrogen Oxygen Fluorine Neon
+            Sodium Magnesium Aluminium Silicon Phosphorus Sulfur Chlorine Argon Potassium Calcium
+            Scandium Titanium Vanadium Chromium Manganese Iron Cobalt Nickel Copper Zinc
+            Gallium Germanium Arsenic Selenium Bromine Krypton Rubidium Strontium Zirconium Niobium
+            Molybdenum Ruthenium Rhodium Palladium Silver Cadmium Indium
+          )
+          tools=(
+            Anvil Hammer Tongs Bellows Chisel Crucible Forge Quenchstone Sledge Fuller
+            Swage Hardy Mandrel Punch Drift Rasp File Vise Guillotine Flatter
+            Set-Hammer Cross-Peen Ball-Peen Straight-Peen Riveter Bick Stake Tuyere Ladle Clamp
+            Grinder Wire-Brush Flux-Spoon Tempering-Bath Trip-Hammer Power-Hammer Press Rolling-Mill Upsetter Drawplate
+            Heading-Tool Hot-Cutter Cold-Cutter
+          )
 
           IFS=. read -r major minor patch <<< "$RELEASE_VERSION"
-          element_index=$(( (major + minor + patch) % ${#elements[@]} ))
-          tool_index=$(( (major * 3 + minor * 2 + patch) % ${#tools[@]} ))
+          version_key=$((major * 1000000 + minor * 1000 + patch))
+          element_index=$((version_key % ${#elements[@]}))
+          tool_index=$(((version_key / ${#elements[@]}) % ${#tools[@]}))
           codename="${elements[$element_index]} ${tools[$tool_index]}"
 
           gh release edit "$RELEASE_TAG" \
