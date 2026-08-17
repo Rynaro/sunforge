@@ -3,6 +3,7 @@ set -euo pipefail
 
 root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 tool="$root_dir/sunshine/bin/configure-host"
+skill_wrapper="$root_dir/skills/sunforge-onboard/scripts/configure"
 stage="$(mktemp -d)"
 trap 'rm -rf -- "$stage"' EXIT
 output="$stage/host.env"
@@ -28,5 +29,8 @@ if "$tool" --yes --name 'bad/name' --connector DP-1 --nic eno1 --output "$stage/
   exit 1
 fi
 [[ ! -e "$stage/invalid.env" ]]
+
+SUNFORGE_REPO="$root_dir" "$skill_wrapper" --dry-run --name Skill-Test \
+  --edid-prefix '' --connector HDMI-A-1 --nic '' >/dev/null
 
 echo "configure-host tests passed"
