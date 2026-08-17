@@ -15,3 +15,8 @@ sunshine/sunshine/
 .vscode/
 *~
 *.swp
+
+# Encrypted recovery archives are intentionally kept out of Git too. Copy them
+# to a password manager, encrypted cloud drive, or offline backup.
+sunforge-private-*.tar.gpg
+private-backups/

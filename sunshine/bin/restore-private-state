@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+umask 077
+archive="${1:-}"
+[[ -n "$archive" && -f "$archive" ]] || {
+  echo "usage: restore-private-state PATH-TO-ARCHIVE.tar.gpg" >&2
+  exit 2
+}
+command -v gpg >/dev/null || { echo "gpg is required" >&2; exit 1; }
+gpg_options=()
+if [[ -n "${SUNFORGE_GPG_PASSPHRASE_FILE:-}" ]]; then
+  [[ -r "$SUNFORGE_GPG_PASSPHRASE_FILE" ]] || { echo "Passphrase file is not readable" >&2; exit 1; }
+  gpg_options+=(--batch --pinentry-mode loopback --passphrase-file "$SUNFORGE_GPG_PASSPHRASE_FILE")
+fi
+
+root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+sunshine_dir="${XDG_CONFIG_HOME:-$HOME/.config}/sunshine"
+stage="$(mktemp -d)"
+decrypted="$stage/archive.tar"
+trap 'rm -rf -- "$stage"' EXIT
+
+gpg "${gpg_options[@]}" --output "$decrypted" --decrypt "$archive"
+if tar -tf "$decrypted" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+  echo "Archive contains an unsafe path; refusing to restore" >&2
+  exit 1
+fi
+tar -C "$stage" -xf "$decrypted"
+
+state="$stage/home/.config/sunshine/sunshine_state.json"
+key="$stage/home/.config/sunshine/credentials/cakey.pem"
+[[ -f "$state" && -f "$key" ]] || {
+  echo "Archive is missing required Sunshine identity files" >&2
+  exit 1
+}
+
+backup="$sunshine_dir/backups/pre-restore-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$backup" "$sunshine_dir/credentials"
+for path in sunshine_state.json portal_token credentials/cacert.pem credentials/cakey.pem; do
+  [[ -f "$sunshine_dir/$path" ]] && install -D -m 0600 "$sunshine_dir/$path" "$backup/$path"
+done
+
+was_active=false
+systemctl --user is-active --quiet sunshine.service && was_active=true
+if $was_active; then
+  systemctl --user stop sunshine.service
+fi
+
+for path in sunshine_state.json portal_token credentials/cacert.pem credentials/cakey.pem; do
+  [[ -f "$stage/home/.config/sunshine/$path" ]] && install -D -m 0600 "$stage/home/.config/sunshine/$path" "$sunshine_dir/$path"
+done
+if [[ -f "$stage/repository/sunshine/config/host.env" ]]; then
+  install -m 0600 "$stage/repository/sunshine/config/host.env" "$root_dir/sunshine/config/host.env"
+fi
+
+if $was_active; then
+  systemctl --user start sunshine.service
+fi
+echo "Private state restored. Previous live state: $backup"
+echo "Run ./sunshine/bin/deploy to render the restored host profile."

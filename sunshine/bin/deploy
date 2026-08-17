@@ -38,6 +38,8 @@ install -m 0755 "$root_dir/bin/hades-steam-big-picture" "$bin_dir/hades-steam-bi
 install -m 0755 "$root_dir/bin/hades-sunshine-start" "$bin_dir/hades-sunshine-start"
 install -m 0755 "$root_dir/bin/configure-kwin-4k" "$bin_dir/configure-kwin-4k"
 install -m 0755 "$root_dir/bin/publication-check" "$bin_dir/sunshine-publication-check"
+install -m 0755 "$root_dir/bin/backup-private-state" "$bin_dir/sunforge-backup-private-state"
+install -m 0755 "$root_dir/bin/restore-private-state" "$bin_dir/sunforge-restore-private-state"
 mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 install -m 0644 "$root_dir/system/sunshine.service" "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/sunshine.service"
 install -m 0644 "$root_dir/system/hades-display-keepalive.service" "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/hades-display-keepalive.service"

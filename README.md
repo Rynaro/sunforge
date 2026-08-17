@@ -170,6 +170,33 @@ For a clean reinstall, clone the repository, recreate `host.env`, run
 `bootstrap`, and pair clients again. If retaining pairings matters, back up the
 live Sunshine state separately and protect it like a credential archive.
 
+### Encrypted identity backup
+
+Preserve the host profile, Web UI identity, TLS key, and Moonlight pairings in a
+single AES-256 encrypted archive:
+
+```bash
+./sunshine/bin/backup-private-state /path/on/backup-media/sunforge-private.tar.gpg
+```
+
+GnuPG asks for a passphrase and never writes an unencrypted archive. Store the
+file off the gaming host and keep the passphrase in a password manager. The
+archive is ignored by Git even if created inside the repository.
+
+After reinstalling Fedora and cloning Sunforge, restore before pairing clients:
+
+```bash
+./sunshine/bin/restore-private-state /path/to/sunforge-private.tar.gpg
+./sunshine/bin/deploy
+```
+
+Restore preserves the current live identity in a timestamped local backup,
+installs private files with mode `0600`, and restarts Sunshine only if it was
+already running.
+
+The encrypted archive is not useful if it exists only on the computer being
+reinstalled. Keep at least one verified copy on separate storage.
+
 ## Security and publication safety
 
 The repository ignores known Sunshine secrets and legacy runtime directories at

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+umask 077
+root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+host_env="$root_dir/sunshine/config/host.env"
+sunshine_dir="${XDG_CONFIG_HOME:-$HOME/.config}/sunshine"
+output="${1:-$PWD/sunforge-private-$(date +%Y%m%d-%H%M%S).tar.gpg}"
+
+command -v gpg >/dev/null || {
+  echo "gpg is required" >&2
+  exit 1
+}
+gpg_options=()
+if [[ -n "${SUNFORGE_GPG_PASSPHRASE_FILE:-}" ]]; then
+  [[ -r "$SUNFORGE_GPG_PASSPHRASE_FILE" ]] || { echo "Passphrase file is not readable" >&2; exit 1; }
+  gpg_options+=(--batch --pinentry-mode loopback --passphrase-file "$SUNFORGE_GPG_PASSPHRASE_FILE")
+fi
+[[ ! -e "$output" ]] || {
+  echo "Refusing to overwrite: $output" >&2
+  exit 1
+}
+
+stage="$(mktemp -d)"
+complete=false
+cleanup() {
+  rm -rf -- "$stage"
+  $complete || rm -f -- "$output"
+}
+trap cleanup EXIT
+mkdir -p "$stage/repository/sunshine/config" "$stage/home/.config/sunshine/credentials"
+
+[[ -f "$host_env" ]] && install -m 0600 "$host_env" "$stage/repository/sunshine/config/host.env"
+for file in sunshine_state.json portal_token; do
+  [[ -f "$sunshine_dir/$file" ]] && install -m 0600 "$sunshine_dir/$file" "$stage/home/.config/sunshine/$file"
+done
+for file in cacert.pem cakey.pem; do
+  [[ -f "$sunshine_dir/credentials/$file" ]] && install -m 0600 "$sunshine_dir/credentials/$file" "$stage/home/.config/sunshine/credentials/$file"
+done
+
+cat > "$stage/MANIFEST.txt" <<'EOF'
+Sunforge private recovery archive
+
+Contains the ignored per-host profile and Sunshine identity/pairing state.
+It intentionally excludes logs and repository-managed sunshine.conf/apps.json.
+Restore only on a trusted machine using sunshine/bin/restore-private-state.
+EOF
+
+tar -C "$stage" -cf - MANIFEST.txt repository home |
+  gpg "${gpg_options[@]}" --symmetric --cipher-algo AES256 --output "$output"
+chmod 0600 "$output"
+complete=true
+
+echo "Encrypted private state: $output"
+echo "Copy this archive off the host. Losing its passphrase makes it unrecoverable."

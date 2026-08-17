@@ -16,10 +16,19 @@ fi
 command -v nvidia-smi >/dev/null && nvidia-smi >/dev/null 2>&1 && ok "NVIDIA driver and NVML respond" || bad "NVIDIA driver is not usable"
 
 sunshine_bin="$(command -v sunshine 2>/dev/null || true)"
-if [[ -n "$sunshine_bin" ]] && getcap "$(readlink -f "$sunshine_bin")" | grep -q cap_sys_admin; then
+capabilities=""
+if [[ -n "$sunshine_bin" ]]; then
+  capabilities="$(getcap "$(readlink -f "$sunshine_bin")" 2>/dev/null || true)"
+fi
+if [[ -n "$sunshine_bin" ]] && grep -q cap_sys_admin <<<"$capabilities"; then
   ok "Sunshine has cap_sys_admin for KMS capture"
 else
   bad "Sunshine lacks cap_sys_admin (run bootstrap)"
+fi
+if grep -q cap_sys_nice <<<"$capabilities"; then
+  ok "Sunshine has cap_sys_nice for high-priority EGL"
+else
+  note "Sunshine lacks cap_sys_nice; streaming works, but high-priority EGL is unavailable (run bootstrap)"
 fi
 
 if id -nG | tr ' ' '\n' | grep -qx input; then

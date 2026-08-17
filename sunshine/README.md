@@ -49,6 +49,11 @@ It does not copy or overwrite `sunshine_state.json`, certificates, pairings, web
 credentials, or logs. Back up that state separately only if preserving paired
 clients across a reinstall is desired.
 
+Use `bin/backup-private-state` to create a passphrase-encrypted recovery archive
+containing `host.env`, Sunshine's TLS identity, Web UI state, and paired clients.
+Use `bin/restore-private-state` after cloning on a fresh installation. Copy the
+encrypted archive off-host; it is deliberately ignored by Git.
+
 ## Unattended/headless boot
 
 No SSH command is needed to create the desktop. At boot, SDDM logs the account
