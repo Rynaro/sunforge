@@ -1,6 +1,12 @@
-# Sunforge
+<p align="center">
+  <img src="assets/sunforge-logo.png" alt="Sunforge — a radiant sun rising behind a forged anvil" width="360">
+</p>
 
-**Turn a Fedora workstation into a reproducible, headless, low-latency game-streaming host.**
+<h1 align="center">Sunforge</h1>
+
+<p align="center">
+  <strong>Turn a Fedora workstation into a reproducible, headless, low-latency game-streaming host.</strong>
+</p>
 
 Sunforge is an opinionated, declarative setup for [Sunshine](https://github.com/LizardByte/Sunshine),
 KDE Plasma Wayland, NVIDIA NVENC, and Moonlight clients. It is designed for the
