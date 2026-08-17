@@ -1,0 +1,124 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+output="$root_dir/sunshine/config/host.env"
+host_name=""
+edid_prefix=""
+connector=""
+nic=""
+assume_yes=false
+dry_run=false
+
+usage() {
+  cat <<'EOF'
+usage: configure-host [OPTIONS]
+
+Create the ignored Sunforge host.env from explicit values or safe detection.
+
+  --name NAME          Moonlight host label
+  --edid-prefix TEXT   KWin edidIdentifier prefix (empty allows auto-selection)
+  --connector NAME     DRM/KWin connector, for example HDMI-A-1
+  --nic NAME           streaming network interface
+  --output PATH        destination host.env
+  --yes                accept detected defaults and overwrite without prompting
+  --dry-run            print the resulting configuration without writing it
+  -h, --help           show this help
+EOF
+}
+
+while (($#)); do
+  case "$1" in
+    --name) host_name="${2:?--name requires a value}"; shift 2 ;;
+    --edid-prefix) edid_prefix="${2-}"; shift 2 ;;
+    --connector) connector="${2:?--connector requires a value}"; shift 2 ;;
+    --nic) nic="${2-}"; shift 2 ;;
+    --output) output="${2:?--output requires a value}"; shift 2 ;;
+    --yes) assume_yes=true; shift ;;
+    --dry-run) dry_run=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+if [[ -z "$connector" ]]; then
+  for status in /sys/class/drm/card*-*/status; do
+    [[ -r "$status" ]] || continue
+    [[ "$(<"$status")" == connected ]] || continue
+    modes="${status%/status}/modes"
+    if [[ ! -r "$modes" ]] || ! grep -qx 3840x2160 "$modes"; then
+      continue
+    fi
+    connector="$(basename "${status%/status}")"
+    connector="${connector#*-}"
+    break
+  done
+fi
+connector="${connector:-HDMI-A-1}"
+
+if [[ -z "$host_name" ]]; then
+  host_name="$(hostnamectl --static 2>/dev/null || hostname 2>/dev/null || true)"
+  host_name="${host_name:-Gaming-PC}"
+fi
+
+if [[ -z "$nic" ]]; then
+  nic="$(ip route show default 2>/dev/null | awk 'NR == 1 {print $5}' || true)"
+fi
+
+kwin_config="${XDG_CONFIG_HOME:-$HOME/.config}/kwinoutputconfig.json"
+if [[ -z "$edid_prefix" && -r "$kwin_config" ]] && command -v jq >/dev/null; then
+  edid_prefix="$(jq -r --arg connector "$connector" '
+    first(.[] | select(.name == "outputs") | .data[] |
+      select(.connectorName == $connector) | .edidIdentifier) // empty
+  ' "$kwin_config")"
+fi
+
+validate() {
+  [[ "$host_name" =~ ^[A-Za-z0-9._\ -]+$ ]] || {
+    echo "Host name may contain only letters, numbers, spaces, dot, underscore, and hyphen" >&2
+    return 2
+  }
+  [[ "$connector" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Invalid connector name" >&2; return 2; }
+  [[ -z "$nic" || "$nic" =~ ^[A-Za-z0-9._:-]+$ ]] || { echo "Invalid network interface" >&2; return 2; }
+  [[ "$edid_prefix" != *$'\n'* && "$edid_prefix" != *$'\r'* ]] || { echo "Invalid EDID prefix" >&2; return 2; }
+}
+
+validate
+
+if ! $assume_yes && ! $dry_run; then
+  [[ -t 0 ]] || {
+    echo "Non-interactive use requires --yes or --dry-run" >&2
+    exit 2
+  }
+  printf 'Sunshine name [%s]: ' "$host_name"; read -r value; host_name="${value:-$host_name}"
+  printf 'Display connector [%s]: ' "$connector"; read -r value; connector="${value:-$connector}"
+  printf 'EDID prefix [%s]: ' "$edid_prefix"; read -r value; edid_prefix="${value:-$edid_prefix}"
+  printf 'Streaming NIC [%s]: ' "${nic:-auto}"; read -r value; nic="${value:-$nic}"
+  if [[ -e "$output" ]]; then
+    printf 'Overwrite %s? [y/N] ' "$output"; read -r answer
+    [[ "$answer" =~ ^[Yy]$ ]] || exit 0
+  fi
+fi
+
+validate
+
+render() {
+  printf 'SUNSHINE_HOST_NAME=%q\n' "$host_name"
+  printf 'SUNSHINE_DISPLAY_EDID_PREFIX=%q\n' "$edid_prefix"
+  printf 'SUNSHINE_DISPLAY_CONNECTOR=%q\n' "$connector"
+  printf 'SUNSHINE_STREAM_NIC=%q\n' "$nic"
+}
+
+if $dry_run; then
+  render
+  exit 0
+fi
+
+mkdir -p "$(dirname "$output")"
+tmp="$(mktemp "${output}.tmp.XXXXXX")"
+trap 'rm -f -- "$tmp"' EXIT
+render > "$tmp"
+chmod 0600 "$tmp"
+mv "$tmp" "$output"
+trap - EXIT
+echo "Wrote private host configuration: $output"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sunforge Onboarding"
+  short_description: "Configure a Sunforge host safely"
+  default_prompt: "Use $sunforge-onboard to detect this host and create its private Sunforge configuration."
