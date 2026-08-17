@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-skill_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-repo_root="$(cd -- "$skill_dir/../.." && pwd)"
+repo_root="${SUNFORGE_REPO:-}"
+if [[ -z "$repo_root" ]]; then
+  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+fi
+if [[ -z "$repo_root" || ! -x "$repo_root/sunshine/bin/configure-host" ]]; then
+  echo "Run this skill from a Sunforge checkout or set SUNFORGE_REPO=/path/to/sunforge" >&2
+  exit 1
+fi
 exec "$repo_root/sunshine/bin/configure-host" "$@"
