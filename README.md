@@ -8,6 +8,11 @@
   <strong>Turn a Fedora workstation into a reproducible, headless, low-latency game-streaming host.</strong>
 </p>
 
+<p align="center">
+  <a href="https://github.com/Rynaro/sunforge/actions/workflows/ci.yml"><img src="https://github.com/Rynaro/sunforge/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/Rynaro/sunforge" alt="MIT license"></a>
+</p>
+
 Sunforge is an opinionated, declarative setup for [Sunshine](https://github.com/LizardByte/Sunshine),
 KDE Plasma Wayland, NVIDIA NVENC, and Moonlight clients. It is designed for the
 awkward real-world case: the host boots without a physical monitor, creates a
@@ -225,6 +230,20 @@ already running.
 
 The encrypted archive is not useful if it exists only on the computer being
 reinstalled. Keep at least one verified copy on separate storage.
+
+## Testing
+
+Run the same validation suite used by GitHub Actions:
+
+```bash
+./sunshine/tests/ci
+```
+
+The suite checks Bash syntax and static analysis, executable script permissions,
+JSON syntax, host configuration generation, and publication safeguards.
+Hardware-dependent behavior remains covered by
+`./sunshine/bin/doctor` on the Fedora host, where the GPU, display, session, and
+network state can be tested for real.
 
 ## Security and publication safety
 

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$root_dir"
+
+mapfile -t shell_files < <(git grep -Il '^#!/usr/bin/env bash' -- ':!sunshine/sunshine/**')
+
+for file in "${shell_files[@]}"; do
+  [[ -x "$file" ]] || {
+    printf 'FAIL %s has a Bash shebang but is not executable\n' "$file" >&2
+    exit 1
+  }
+  bash -n "$file"
+done
+
+# Dynamic host configuration is intentionally sourced, and doctor uses
+# short-circuit expressions whose reporting helpers always succeed.
+shellcheck --severity=warning --exclude=SC1090,SC2015 "${shell_files[@]}"
+
+while IFS= read -r file; do
+  jq empty "$file"
+done < <(git ls-files '*.json')
+
+./sunshine/tests/configure-host
+./sunshine/bin/publication-check
+
+echo "CI checks passed"
