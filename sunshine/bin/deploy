@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+host_env="$root_dir/config/host.env"
+[[ -f "$host_env" ]] && source "$host_env"
+SUNSHINE_HOST_NAME="${SUNSHINE_HOST_NAME:-Gaming-PC}"
+[[ "$SUNSHINE_HOST_NAME" =~ ^[A-Za-z0-9._\ -]+$ ]] || {
+  echo "SUNSHINE_HOST_NAME contains unsupported characters" >&2
+  exit 2
+}
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/sunshine"
+host_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/sunshine-host"
+bin_dir="$HOME/.local/bin"
+backup_dir="$config_dir/backups/$(date +%Y%m%d-%H%M%S)"
+
+mkdir -p "$config_dir" "$bin_dir" "$host_config_dir"
+if [[ -f "$host_env" ]]; then
+  install -m 0600 "$host_env" "$host_config_dir/host.env"
+fi
+rendered_conf="$(mktemp)"
+trap 'rm -f "$rendered_conf"' EXIT
+sed "s|@SUNSHINE_HOST_NAME@|$SUNSHINE_HOST_NAME|g" "$root_dir/config/sunshine.conf" > "$rendered_conf"
+
+for file in sunshine.conf apps.json; do
+  source_file="$root_dir/config/$file"
+  [[ "$file" == sunshine.conf ]] && source_file="$rendered_conf"
+  if [[ -f "$config_dir/$file" ]] && ! cmp -s "$source_file" "$config_dir/$file"; then
+    mkdir -p "$backup_dir"
+    cp -a "$config_dir/$file" "$backup_dir/$file"
+  fi
+  install -m 0644 "$source_file" "$config_dir/$file"
+done
+install -m 0755 "$root_dir/bin/hades-display-profile" "$bin_dir/hades-display-profile"
+install -m 0755 "$root_dir/bin/hades-display-wake" "$bin_dir/hades-display-wake"
+install -m 0755 "$root_dir/bin/configure-plasma-headless" "$bin_dir/configure-plasma-headless"
+install -m 0755 "$root_dir/bin/hades-steam-big-picture" "$bin_dir/hades-steam-big-picture"
+install -m 0755 "$root_dir/bin/hades-sunshine-start" "$bin_dir/hades-sunshine-start"
+install -m 0755 "$root_dir/bin/configure-kwin-4k" "$bin_dir/configure-kwin-4k"
+install -m 0755 "$root_dir/bin/publication-check" "$bin_dir/sunshine-publication-check"
+mkdir -p "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+install -m 0644 "$root_dir/system/sunshine.service" "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/sunshine.service"
+install -m 0644 "$root_dir/system/hades-display-keepalive.service" "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/hades-display-keepalive.service"
+"$bin_dir/configure-plasma-headless"
+
+echo "Deployed managed files to $config_dir and $bin_dir"
+if systemctl --user is-active --quiet sunshine.service; then
+  systemctl --user daemon-reload
+  systemctl --user disable --now hades-display-keepalive.service 2>/dev/null || true
+  systemctl --user restart sunshine.service
+  echo "Restarted sunshine.service"
+else
+  systemctl --user daemon-reload
+  systemctl --user disable hades-display-keepalive.service 2>/dev/null || true
+  echo "Sunshine is not active; run: systemctl --user enable --now sunshine.service"
+fi

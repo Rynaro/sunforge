@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+sudo dnf install -y Sunshine libkscreen jq firewalld ethtool tuned tuned-ppd gamemode irqbalance
+
+sunshine_bin="$(readlink -f "$(command -v sunshine)")"
+sudo setcap cap_sys_admin,cap_sys_nice+p "$sunshine_bin"
+
+for group in input video render; do
+  if getent group "$group" >/dev/null && ! id -nG "$USER" | tr ' ' '\n' | grep -qx "$group"; then
+    sudo usermod -aG "$group" "$USER"
+  fi
+done
+
+sudo modprobe uinput
+sudo modprobe uhid
+sudo systemctl enable --now firewalld
+sudo systemctl set-default graphical.target
+
+# Boot directly into the user's Plasma Wayland session on the HDMI dummy plug.
+# The generated file contains no password; SDDM performs local autologin.
+autologin_tmp="$(mktemp)"
+trap 'rm -f "$autologin_tmp"' EXIT
+sed "s/@USER@/$USER/g" "$root_dir/system/sddm-autologin.conf" > "$autologin_tmp"
+sudo install -D -m 0644 "$autologin_tmp" /etc/sddm.conf.d/10-hades-headless.conf
+sudo install -D -m 0644 "$root_dir/system/99-hades-headless.conf" /etc/systemd/logind.conf.d/99-hades-headless.conf
+sudo install -D -m 0755 "$root_dir/bin/hades-performance-apply" /usr/local/libexec/hades-performance-apply
+sudo install -D -m 0644 "$root_dir/system/hades-performance.service" /etc/systemd/system/hades-performance.service
+
+# A streaming appliance must not suspend while waiting for a client.
+sudo systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target
+sudo systemctl enable sddm.service sshd.service irqbalance.service nvidia-persistenced.service
+
+# Favor deterministic frame delivery over idle power savings. GameMode is held
+# only while a gaming stream is active and supplies process I/O prioritization.
+sudo systemctl enable --now tuned.service
+sudo tuned-adm profile latency-performance
+sudo systemctl daemon-reload
+sudo systemctl enable --now hades-performance.service
+
+# Standard Sunshine/Moonlight ports, scoped to the currently active LAN zone.
+zone="$(firewall-cmd --get-active-zones | awk 'NR==1 {print $1}')"
+zone="${zone:-home}"
+sudo firewall-cmd --permanent --zone="$zone" --add-port=47984/tcp
+sudo firewall-cmd --permanent --zone="$zone" --add-port=47989-47990/tcp
+sudo firewall-cmd --permanent --zone="$zone" --add-port=48010/tcp
+sudo firewall-cmd --permanent --zone="$zone" --add-port=47998-48000/udp
+sudo firewall-cmd --permanent --zone="$zone" --add-port=48002/udp
+sudo firewall-cmd --reload
+
+"$root_dir/bin/deploy"
+systemctl --user enable sunshine.service
+if systemctl --user is-active --quiet graphical-session.target; then
+  systemctl --user restart sunshine.service
+else
+  echo "The graphical user target is not active in this shell; Sunshine will start at boot."
+fi
+
+echo
+echo "Bootstrap complete. Reboot once to activate groups and unattended Plasma."
+echo "After reboot, SSH in and run: $root_dir/bin/doctor"

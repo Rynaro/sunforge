@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# TuneD should set this, but some firmware keeps boost disabled while its active
+# profile requested boost=1. Enforce it after TuneD has started.
+if [[ -w /sys/devices/system/cpu/cpufreq/boost ]]; then
+  if ! echo 1 > /sys/devices/system/cpu/cpufreq/boost; then
+    echo "WARNING: the kernel rejected CPU boost; enable Core Performance Boost in firmware" >&2
+  fi
+fi
+
+# Avoid Energy Efficient Ethernet wake latency. Keep checksum/GSO/GRO enabled:
+# they reduce CPU overhead and the RTL8125 does not expose hardware RSS anyway.
+nic="${SUNSHINE_STREAM_NIC:-${HADES_STREAM_NIC:-}}"
+if [[ -z "$nic" ]]; then
+  nic="$(ip route show default 2>/dev/null | awk 'NR==1 {print $5}')"
+fi
+if [[ -e "/sys/class/net/$nic" ]] && command -v ethtool >/dev/null; then
+  ethtool --set-eee "$nic" eee off 2>/dev/null || true
+fi
+
+# Persistence removes driver/device initialization from the first game stream.
+if command -v nvidia-smi >/dev/null; then
+  nvidia-smi --persistence-mode=1 >/dev/null 2>&1 || true
+fi

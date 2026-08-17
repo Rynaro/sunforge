@@ -1,0 +1,10 @@
+# Machine identity, pairings, web credentials, TLS keys, and runtime output
+sunshine_state.json
+credentials/
+*.log
+portal_token
+backups/
+config/host.env
+
+# Unmanaged copy that existed before this declarative layout (contains secrets).
+/sunshine/

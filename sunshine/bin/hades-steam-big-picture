@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command -v steam >/dev/null || {
+  echo "Steam is not installed" >&2
+  exit 1
+}
+
+# A forced compositor/session restart can kill Steam before it removes its
+# singleton marker. Without this check, later requests are written to an
+# unowned FIFO and Steam exits successfully without opening a window.
+pid_file="$HOME/.steam/steam.pid"
+if [[ -f "$pid_file" ]]; then
+  steam_pid="$(<"$pid_file")"
+  if [[ ! "$steam_pid" =~ ^[0-9]+$ ]] || ! kill -0 "$steam_pid" 2>/dev/null; then
+    stale_dir="${XDG_RUNTIME_DIR:-/tmp}/hades-steam-stale"
+    mkdir -p "$stale_dir"
+    mv "$pid_file" "$stale_dir/steam.pid.$(date +%s)"
+  fi
+fi
+
+# Steam forwards this to an existing instance or starts directly in Gamepad UI.
+exec steam -gamepadui

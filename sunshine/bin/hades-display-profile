@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+profile="${1:-}"
+connector="${HADES_DISPLAY_CONNECTOR:-HDMI-A-1}"
+
+usage() {
+  echo "usage: hades-display-profile {tv|low-latency|tablet|desktop|status}" >&2
+  exit 2
+}
+
+command -v kscreen-doctor >/dev/null || {
+  echo "kscreen-doctor is required (run sunshine/bin/bootstrap)" >&2
+  exit 1
+}
+
+case "$profile" in
+  tv)
+    mode="3840x2160@60"
+    hdr="enable"
+    scale="1"
+    ;;
+  low-latency)
+    mode="1920x1080@60"
+    hdr="disable"
+    scale="1"
+    ;;
+  tablet)
+    # The HDP-V105 EDID has no 16:10 mode above 1440x900. Capture 4K and let
+    # Moonlight request/scale to the tablet's native 1920x1200 or 2560x1600.
+    mode="3840x2160@60"
+    hdr="disable"
+    scale="2"
+    ;;
+  desktop)
+    mode="3840x2160@60"
+    hdr="disable"
+    scale="2"
+    ;;
+  status)
+    exec kscreen-doctor --outputs
+    ;;
+  *) usage ;;
+esac
+
+if ! kscreen-doctor --outputs | grep -Fq "$connector"; then
+  echo "Display $connector was not found. Available outputs:" >&2
+  kscreen-doctor --outputs >&2
+  exit 1
+fi
+
+kscreen-doctor "output.${connector}.enable" "output.${connector}.mode.${mode}" "output.${connector}.scale.${scale}"
+if [[ "$hdr" == enable ]]; then
+  kscreen-doctor "output.${connector}.hdr.enable" "output.${connector}.wcg.enable"
+else
+  kscreen-doctor "output.${connector}.hdr.disable" "output.${connector}.wcg.disable"
+fi
+
+# HDR, scale, and mode changes are asynchronous KMS operations.
+"$(dirname -- "${BASH_SOURCE[0]}")/hades-display-wake"

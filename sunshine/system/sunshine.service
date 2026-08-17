@@ -1,0 +1,20 @@
+[Unit]
+Description=Sunshine game streaming host for Moonlight
+Documentation=https://docs.lizardbyte.dev/projects/sunshine/latest/
+After=plasma-kwin_wayland.service graphical-session.target
+Wants=graphical-session.target
+PartOf=graphical-session.target
+StartLimitIntervalSec=500
+StartLimitBurst=5
+
+[Service]
+# SSH-driven restarts must not lose the headless Plasma display environment.
+ExecStart=%h/.local/bin/hades-sunshine-start
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=sunshine
+
+[Install]
+WantedBy=graphical-session.target

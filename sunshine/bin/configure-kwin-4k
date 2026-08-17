@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+installed_host_env="${XDG_CONFIG_HOME:-$HOME/.config}/sunshine-host/host.env"
+repository_host_env="$root_dir/config/host.env"
+host_env="${SUNSHINE_HOST_CONFIG:-$installed_host_env}"
+[[ -f "$host_env" ]] || host_env="$repository_host_env"
+[[ -f "$host_env" ]] && source "$host_env"
+edid_prefix="${SUNSHINE_DISPLAY_EDID_PREFIX:-}"
+
+config="${XDG_CONFIG_HOME:-$HOME/.config}/kwinoutputconfig.json"
+[[ -f "$config" ]] || {
+  echo "KWin output configuration not found: $config" >&2
+  exit 1
+}
+command -v jq >/dev/null || {
+  echo "jq is required" >&2
+  exit 1
+}
+
+tmp="$(mktemp "${config}.tmp.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+
+# Target the HDP-V105 EDID, not a connector index or KWin UUID. Preserve the
+# exact EDID refresh rate while making physical and logical pixels identical.
+jq --arg prefix "$edid_prefix" '
+  map(
+    if .name == "outputs" then
+      .data |= map(
+        if (($prefix != "" and ((.edidIdentifier // "") | startswith($prefix))) or
+            ($prefix == "" and .enabled == true and .mode.width == 3840 and .mode.height == 2160)) then
+          .scale = 1
+          | .highDynamicRange = false
+          | .wideColorGamut = false
+          | .mode.width = 3840
+          | .mode.height = 2160
+        else . end
+      )
+    else . end
+  )
+' "$config" > "$tmp"
+
+if ! jq -e --arg prefix "$edid_prefix" 'any(.[] | select(.name == "outputs") | .data[]; (($prefix != "" and ((.edidIdentifier // "") | startswith($prefix))) or ($prefix == "" and .enabled == true)) and .scale == 1 and .mode.width == 3840 and .mode.height == 2160)' "$tmp" >/dev/null; then
+  echo "No matching 4K output record was found" >&2
+  exit 1
+fi
+
+chmod --reference="$config" "$tmp"
+mv "$tmp" "$config"
+trap - EXIT
+
+kwriteconfig6 --file kwinrc --notify --group Xwayland --key Scale 1
+
+echo "Configured the selected desktop for 3840x2160 SDR at 100% scale."
+echo "Reboot the host to activate it; do not restart KWin inside the current session."

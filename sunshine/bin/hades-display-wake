@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+connector="${HADES_DISPLAY_CONNECTOR:-HDMI-A-1}"
+drm_enabled=""
+
+command -v kscreen-doctor >/dev/null || {
+  echo "kscreen-doctor is required" >&2
+  exit 1
+}
+
+kscreen-doctor "output.${connector}.enable"
+
+for candidate in /sys/class/drm/card*-"$connector"/enabled; do
+  if [[ -e "$candidate" ]]; then
+    drm_enabled="$candidate"
+    break
+  fi
+done
+
+[[ -n "$drm_enabled" ]] || {
+  echo "No DRM connector found for $connector" >&2
+  exit 1
+}
+
+# A modeset can briefly report enabled before its planes are ready. Require the
+# connector to remain enabled across several checks before Sunshine opens KMS.
+stable=0
+for _ in {1..30}; do
+  if [[ "$(cat "$drm_enabled")" == enabled ]]; then
+    stable=$((stable + 1))
+    (( stable >= 5 )) && exit 0
+  else
+    stable=0
+  fi
+  sleep 0.2
+done
+
+echo "$connector did not become a stable active scanout" >&2
+exit 1

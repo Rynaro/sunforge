@@ -1,0 +1,17 @@
+# Local host customization. Commit only the example.
+sunshine/config/host.env
+
+# Sunshine runtime identity and historical copies. These may contain web
+# credentials, TLS private keys, paired-client certificates, IPs, and logs.
+sunshine/sunshine/
+**/sunshine_state.json
+**/credentials/
+**/portal_token
+**/*.log
+**/backups/
+
+# Editor and OS noise
+.idea/
+.vscode/
+*~
+*.swp

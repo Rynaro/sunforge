@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command -v kwriteconfig6 >/dev/null || {
+  echo "kwriteconfig6 is required" >&2
+  exit 1
+}
+
+# Keep the NVIDIA scanout backing the HDMI dummy alive indefinitely.
+kwriteconfig6 --file powerdevilrc --notify --group AC --group Display --key DimDisplayWhenIdle --type bool false
+kwriteconfig6 --file powerdevilrc --notify --group AC --group Display --key TurnOffDisplayWhenIdle --type bool false
+kwriteconfig6 --file powerdevilrc --notify --group AC --group Display --key TurnOffDisplayIdleTimeoutSec -- -1
+kwriteconfig6 --file powerdevilrc --notify --group AC --group Display --key TurnOffDisplayIdleTimeoutWhenLockedSec -- -1
+kwriteconfig6 --file powerdevilrc --notify --group AC --group SuspendAndShutdown --key AutoSuspendAction --type uint 0
+
+# An unattended Sunshine appliance cannot require a local unlock before input.
+kwriteconfig6 --file kscreenlockerrc --notify --group Daemon --key Autolock --type bool false
+kwriteconfig6 --file kscreenlockerrc --notify --group Daemon --key LockOnResume --type bool false
+kwriteconfig6 --file kscreenlockerrc --notify --group Daemon --key Timeout --type int 0
+
+# Moonlight receives an already-shaped relative signal from Android's physical
+# trackpad. Avoid applying KWin's adaptive curve a second time. Sunshine's
+# uinput IDs are stable: vendor 0xBEEF (48879), product 0xDEAD (57005).
+mouse_group="Mouse passthrough"
+kwriteconfig6 --file kcminputrc --notify --group Libinput --group 48879 --group 57005 --group "$mouse_group" --key PointerAccelerationProfile 1
+kwriteconfig6 --file kcminputrc --notify --group Libinput --group 48879 --group 57005 --group "$mouse_group" --key PointerAcceleration -- -0.250
+kwriteconfig6 --file kcminputrc --notify --group Libinput --group 48879 --group 57005 --group "$mouse_group" --key ScrollFactor 0.75
+
+systemctl --user try-restart plasma-powerdevil.service 2>/dev/null || true

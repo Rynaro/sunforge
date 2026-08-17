@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+failures=0
+ok() { printf 'OK   %s\n' "$*"; }
+bad() { printf 'FAIL %s\n' "$*"; failures=$((failures + 1)); }
+note() { printf 'INFO %s\n' "$*"; }
+
+[[ -r /etc/fedora-release ]] && note "$(cat /etc/fedora-release)"
+if command -v sunshine >/dev/null; then
+  sunshine_version="$(rpm -q --qf '%{VERSION}-%{RELEASE}' Sunshine 2>/dev/null || echo installed)"
+  ok "Sunshine $sunshine_version"
+else
+  bad "Sunshine is not installed"
+fi
+command -v nvidia-smi >/dev/null && nvidia-smi >/dev/null 2>&1 && ok "NVIDIA driver and NVML respond" || bad "NVIDIA driver is not usable"
+
+sunshine_bin="$(command -v sunshine 2>/dev/null || true)"
+if [[ -n "$sunshine_bin" ]] && getcap "$(readlink -f "$sunshine_bin")" | grep -q cap_sys_admin; then
+  ok "Sunshine has cap_sys_admin for KMS capture"
+else
+  bad "Sunshine lacks cap_sys_admin (run bootstrap)"
+fi
+
+if id -nG | tr ' ' '\n' | grep -qx input; then
+  ok "User belongs to input group"
+else
+  bad "User is not in input group; controllers/keyboard/mouse will fail until bootstrap + re-login"
+fi
+
+[[ -e /dev/uinput ]] && [[ -w /dev/uinput ]] && ok "/dev/uinput is writable" || bad "/dev/uinput is absent or not writable"
+connected="$(grep -l '^connected$' /sys/class/drm/card*-*/status 2>/dev/null | head -n1 || true)"
+if [[ -n "$connected" ]]; then
+  output="${connected%/status}"
+  ok "Connected display: ${output##*/}"
+  grep -qx '3840x2160' "$output/modes" && ok "Dummy EDID advertises 3840x2160" || bad "Connected display has no 4K mode"
+else
+  bad "No connected DRM display (check dummy plug)"
+fi
+
+session_type="${XDG_SESSION_TYPE:-unknown}"
+graphical_session="$(loginctl list-sessions --no-legend 2>/dev/null | awk -v user="$USER" '$3 == user {print $1}' | while read -r sid; do loginctl show-session "$sid" -p Type --value 2>/dev/null; done | grep -Em1 '^(wayland|x11)$' || true)"
+if [[ "$session_type" == wayland || "$session_type" == x11 ]]; then
+  ok "This shell is inside a $session_type graphical session"
+elif [[ -n "$graphical_session" ]]; then
+  ok "Headless graphical session is active ($graphical_session); this shell is SSH/TTY"
+else
+  bad "No graphical seat session is active; check SDDM autologin"
+fi
+
+if [[ "$session_type" == wayland || "$session_type" == x11 ]]; then
+  if command -v kscreen-doctor >/dev/null && kscreen-doctor --outputs >/dev/null 2>&1; then
+    ok "KScreen can control the display"
+  else
+    bad "KScreen cannot reach Plasma"
+  fi
+else
+  note "KScreen control check skipped from SSH (display helper runs inside Sunshine's Plasma session)"
+fi
+
+systemctl is-enabled --quiet sddm.service 2>/dev/null && ok "SDDM is enabled at boot" || bad "SDDM is not enabled"
+[[ -f /etc/sddm.conf.d/10-hades-headless.conf || -f /etc/sddm.conf.d/10-autologin.conf ]] && ok "SDDM autologin is configured" || bad "SDDM autologin is not configured"
+systemctl is-enabled --quiet sleep.target 2>/dev/null && bad "Sleep is enabled; headless availability is not guaranteed" || ok "System sleep targets are disabled"
+
+if systemctl --user is-active --quiet sunshine.service 2>/dev/null; then
+  ok "sunshine.service is active"
+else
+  bad "sunshine.service is not active"
+fi
+
+if command -v ethtool >/dev/null; then
+  nic="$(ip route show default 2>/dev/null | awk 'NR==1 {print $5}')"
+  if [[ -n "$nic" ]]; then
+    speed="$(ethtool "$nic" 2>/dev/null | awk -F': ' '/Speed:/{print $2}')"
+    link="$(ethtool "$nic" 2>/dev/null | awk -F': ' '/Link detected:/{print $2}')"
+    [[ "$link" == yes ]] && ok "$nic link is up at ${speed:-unknown speed}" || bad "$nic link is down"
+    [[ "$speed" == 2500Mb/s ]] || note "$nic supports 2.5 Gb/s but the link partner currently negotiates ${speed:-unknown}; 1 Gb/s is sufficient for 4K60"
+    eee="$(ethtool --show-eee "$nic" 2>/dev/null | awk -F': ' '/EEE status:/{print $2}')"
+    [[ "$eee" == disabled* ]] && ok "$nic Energy Efficient Ethernet is disabled" || bad "$nic EEE is not disabled"
+  else
+    bad "No default network interface found"
+  fi
+fi
+
+boost="$(cat /sys/devices/system/cpu/cpufreq/boost 2>/dev/null || true)"
+[[ "$boost" == 1 ]] && ok "Ryzen frequency boost is enabled" || bad "Ryzen frequency boost is disabled"
+active_tuned="$(tuned-adm active 2>/dev/null || true)"
+[[ "$active_tuned" == *latency-performance* ]] && ok "TuneD latency-performance profile is active" || bad "TuneD latency-performance profile is not active"
+systemctl is-active --quiet irqbalance.service 2>/dev/null && ok "IRQ balancing is active" || bad "IRQ balancing is inactive"
+if command -v gamemoded >/dev/null && gamemoded -t >/dev/null 2>&1; then
+  ok "GameMode self-test passes"
+else
+  bad "GameMode self-test failed"
+fi
+
+log_file="${XDG_CONFIG_HOME:-$HOME/.config}/sunshine/sunshine.log"
+if [[ -f "$log_file" ]]; then
+  note "Recent Sunshine errors:"
+  grep -Ei 'error|fatal|permission denied' "$log_file" | tail -n 12 || true
+fi
+
+(( failures == 0 )) || exit 1

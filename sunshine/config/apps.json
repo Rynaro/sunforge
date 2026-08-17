@@ -1,0 +1,27 @@
+{
+  "env": {
+    "PATH": "$(HOME)/.local/bin:$(PATH)"
+  },
+  "apps": [
+    {
+      "name": "TV — 4K60 Gaming",
+      "image-path": "steam.png",
+      "cmd": "gamemoderun /usr/bin/sleep infinity",
+      "detached": ["hades-steam-big-picture"]
+    },
+    {
+      "name": "TV — 1080p60 Low Latency",
+      "image-path": "steam.png",
+      "cmd": "gamemoderun /usr/bin/sleep infinity",
+      "detached": ["hades-steam-big-picture"]
+    },
+    {
+      "name": "Tablet — Desktop",
+      "image-path": "desktop.png"
+    },
+    {
+      "name": "Mac — Desktop",
+      "image-path": "desktop.png"
+    }
+  ]
+}

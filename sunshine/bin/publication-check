@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+cd "$root_dir"
+fail=0
+
+bad() { printf 'FAIL %s\n' "$*" >&2; fail=1; }
+ok() { printf 'OK   %s\n' "$*"; }
+
+sensitive=(
+  'sunshine/config/host.env'
+  'sunshine/sunshine'
+)
+
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  for path in "${sensitive[@]}"; do
+    if git ls-files --error-unmatch "$path" >/dev/null 2>&1 || git ls-files "$path" | grep -q .; then
+      bad "$path is tracked"
+    fi
+  done
+  tracked="$(git ls-files)"
+  scannable="$(printf '%s\n' "$tracked" | rg -v '^sunshine/bin/publication-check$' || true)"
+  if [[ -n "$scannable" ]] && printf '%s\n' "$scannable" | xargs -r rg -l '(BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY|"password"[[:space:]]*:)' 2>/dev/null; then
+    bad "a tracked file matches a credential/private-key signature"
+  fi
+else
+  rg -q '^sunshine/config/host\.env$' .gitignore || bad "root ignore does not protect host.env"
+  rg -q '^sunshine/sunshine/$' .gitignore || bad "root ignore does not protect runtime state"
+  ok "Git is not initialized yet; root ignore rules were checked directly"
+fi
+
+for path in "${sensitive[@]}"; do
+  git check-ignore -q "$path" 2>/dev/null || [[ -f .gitignore ]] || bad "$path is not protected by ignore rules"
+done
+
+(( fail == 0 )) || exit 1
+ok "publication safeguards passed"

@@ -1,0 +1,12 @@
+[Unit]
+Description=Sunshine host low-latency gaming hardware policy
+After=tuned.service NetworkManager.service nvidia-persistenced.service
+Wants=tuned.service NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/hades-performance-apply
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
