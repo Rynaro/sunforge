@@ -1,0 +1,39 @@
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create or update release pull request
+        id: release
+        uses: googleapis/release-please-action@v4
+
+      - name: Give the release a forge name
+        if: ${{ steps.release.outputs.release_created == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag_name }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          elements=(Hydrogen Helium Carbon Neon Silicon Iron Copper Silver Gold)
+          tools=(Anvil Hammer Tongs Bellows Chisel Crucible Forge Quenchstone Sledge)
+
+          IFS=. read -r major minor patch <<< "$RELEASE_VERSION"
+          element_index=$(( (major + minor + patch) % ${#elements[@]} ))
+          tool_index=$(( (major * 3 + minor * 2 + patch) % ${#tools[@]} ))
+          codename="${elements[$element_index]} ${tools[$tool_index]}"
+
+          gh release edit "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$codename · $RELEASE_TAG"
