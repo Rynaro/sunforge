@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+tool="$root_dir/sunshine/bin/configure-host"
+stage="$(mktemp -d)"
+trap 'rm -rf -- "$stage"' EXIT
+output="$stage/host.env"
+
+"$tool" --yes --name 'Test Host' --edid-prefix 'Vendor 123' \
+  --connector DP-1 --nic eno1 --output "$output"
+
+[[ "$(stat -c %a "$output")" == 600 ]]
+# The generated fixture is the subject of this test.
+# shellcheck disable=SC1090
+source "$output"
+[[ "$SUNSHINE_HOST_NAME" == 'Test Host' ]]
+[[ "$SUNSHINE_DISPLAY_EDID_PREFIX" == 'Vendor 123' ]]
+[[ "$SUNSHINE_DISPLAY_CONNECTOR" == DP-1 ]]
+[[ "$SUNSHINE_STREAM_NIC" == eno1 ]]
+
+dry_run="$("$tool" --dry-run --name Dry-Run --edid-prefix '' --connector HDMI-A-1 --nic '')"
+grep -q '^SUNSHINE_HOST_NAME=Dry-Run$' <<<"$dry_run"
+grep -q '^SUNSHINE_DISPLAY_EDID_PREFIX=' <<<"$dry_run"
+
+if "$tool" --yes --name 'bad/name' --connector DP-1 --nic eno1 --output "$stage/invalid.env" 2>/dev/null; then
+  echo "invalid host name was accepted" >&2
+  exit 1
+fi
+[[ ! -e "$stage/invalid.env" ]]
+
+echo "configure-host tests passed"

@@ -82,6 +82,29 @@ ${EDITOR:-vi} sunshine/config/host.env
 The ignored `host.env` controls the Moonlight host label, optional EDID prefix,
 display connector, and streaming NIC. It is never meant to be committed.
 
+Newcomers can generate it interactively from detected hardware:
+
+```bash
+./sunshine/bin/configure-host
+```
+
+For unattended provisioning, inspect first and then accept explicitly:
+
+```bash
+./sunshine/bin/configure-host --dry-run
+./sunshine/bin/configure-host --yes
+```
+
+Coding agents can use the repository-distributed `$sunforge-onboard` skill in
+`skills/sunforge-onboard`. The skill delegates configuration to the same
+deterministic command and forbids reading or committing Sunshine runtime state.
+Install it for Codex discovery with:
+
+```bash
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
+cp -a skills/sunforge-onboard "${CODEX_HOME:-$HOME/.codex}/skills/"
+```
+
 ### 2. Bootstrap the host
 
 Run from the Linux account that should own the unattended Plasma session:
@@ -237,6 +260,8 @@ sunshine/
 ├── bin/       bootstrap, deployment, launch, and diagnostic tools
 ├── config/    public templates and the ignored per-host configuration
 └── system/    system and user service definitions
+skills/
+└── sunforge-onboard/  LLM onboarding workflow and deterministic wrapper
 ```
 
 Detailed implementation notes and hardware rationale live in
